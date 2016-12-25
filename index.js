@@ -9,6 +9,23 @@ var newsConfig = require("./news-config");
 
 //var Twitter = new twit(config);
 
+// articleCache will contain the last reference to articles already tweeted
+var articleCache = [];
+
+for (var i = 0; i < newsConfig.length; ++i){
+  articleCache[i] = {
+    title: "",
+    url: "",
+    hashTags: []
+  };
+}
+
+
+// Will keep track of which news site bot pulls from as well as which index
+// the cached articles are stored on. Since the counter aligns with the news site
+// from the config file, it will be the same reference in our articleCache var.
+var newsCounter = 0;
+
 
 // getData function used as a generic callback
 function getData (err, data, res){
@@ -56,8 +73,26 @@ function fetchNews(site){
 
         if (err) deferred.reject(`Failed to make a request to news site:  ${site}.`);
 
+
+        /*else if (newsArticle["url"] == articleCache[newsCounter]["url"]){
+          return console.log("Article already processed by this bot.");
+        }
+        else {
+          articleCache[newsCounter] = newsArticle;
+          // ***  post to twitter;
+          console.log(articleCache[newsCounter]);
+        }*/
+
+
+
         else {
           var article = result["rss"]["channel"][0].item[0];
+
+
+          if (String(article["title"]) == String(articleCache[newsCounter]["title"])) {
+            newsCounter++;
+            return deferred.reject(`Already parsed the article titled: ${article.title}`);
+          }
           deferred.resolve(article);
         }
       })
@@ -71,8 +106,11 @@ function fetchNews(site){
 function generateTags(article){
 
   var deferred = Q.defer();
+  var content;
 
-  var content = qs.unescape(String(article["content:encoded"]));
+  if (article["content:encoded"] == undefined) content = qs.unescape(String(article["description"]));
+  else content = qs.unescape(String(article["content:encoded"]));
+
 
   // regex expression that removes all html tags :D
   var regexTags = /(<([^>]+)>)/ig;
@@ -147,6 +185,11 @@ function generateTags(article){
     url: article["shortURL"],
     hashTags: maxCollection
   };
+
+// Must set the articleCache here, since in the interval the promise object will not return in time
+  articleCache[newsCounter] = formattedArticle;
+  newsCounter++;
+
   deferred.resolve(formattedArticle);
 
   return deferred.promise;
@@ -160,12 +203,12 @@ function generateTags(article){
 function startChain(site){
   fetchNews(site)
   .then(function(article){
-    //return shortenURL(article);
-    return generateTags(article);
+    return shortenURL(article);
+    //return generateTags(article);
   })
   .then(function(article){
-    //return generateTags(article);
-  console.log(article);
+    return generateTags(article);
+  //console.log(article);
   })
   .then(function(result){
     console.log(result);
@@ -175,11 +218,18 @@ function startChain(site){
   })
 };
 
-// Will keep track of which news site bot pulls from
-var newsCounter = 0;
+//console.log(newsConfig.length);
 setInterval(function(){
-  if (newsCounter == newsConfig.length) newsCounter = 0;
+  // reset newsCounter variable if out of range of our news site array
+  //console.log(`News counter at: ${newsCounter}, news config length at: ${newsConfig.length}`);
+  if (newsCounter == newsConfig.length){
+    newsCounter = 0;
+  }
+  // call promise chain, error checking needs to be done inside promise chain
+  // this is because main thread of the interval continues despite promise
+  // not being returned
   startChain(newsConfig[newsCounter]);
-  newsCounter++;
-},10000)
+  // change time in MS to something more reasonable, perhaps every 30 mins. 1,800,000 ms
+},5000)
+
  //startChain();
