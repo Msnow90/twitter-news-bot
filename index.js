@@ -7,7 +7,7 @@ var parseString = require("xml2js").parseString;
 var newsConfig = require("./news-config");
 
 
-//var Twitter = new twit(config);
+var Twitter = new twit(config);
 
 // articleCache will contain the last reference to articles already tweeted
 var articleCache = [];
@@ -121,7 +121,7 @@ function generateTags(article){
   // remove all unwanted characters from the organic words
   var t = content.replace(regexTags, " ").replace(/,/g, "").replace(/"/g, "").replace(/\(/g, "")
   .replace(/\)/g, "").replace(/\./g, "").replace(/;/g, "").replace(/:/g, "").replace(regexComma, "")
-  .replace(regexCode, "");
+  .replace(regexCode, "").replace(/-/g, "");
 
   // split words into an array containing an element for every word
   var t2 = t.split(" ");
@@ -171,9 +171,9 @@ function generateTags(article){
       }
     }
     delete wordCounterObj[wordHolder];
-    var returnObj = {};
-    returnObj[wordHolder] = countHolder;
-    return returnObj;
+    //var returnObj = {};
+    //returnObj[wordHolder] = countHolder;
+    return  "#" + wordHolder;
   }
 
   for (var j = 0; j < hashTagLimit; ++j){
@@ -186,7 +186,7 @@ function generateTags(article){
     hashTags: maxCollection
   };
 
-// Must set the articleCache here, since in the interval the promise object will not return in time
+  // Must set the articleCache here, since in the interval the promise object will not return in time
   articleCache[newsCounter] = formattedArticle;
   newsCounter++;
 
@@ -195,7 +195,25 @@ function generateTags(article){
   return deferred.promise;
 }
 
-
+//send out tweet
+function sendTweet(article){
+  console.log(article);
+  var deferred = Q.defer();
+  // need to shorten title to preserve characters for twitter's limit
+  var shortTitle;
+  if (article["title"][0].length > 50) shortTitle = article["title"][0].substr(0,50) + "...";
+  else shortTitle = article["title"][0];
+  console.log(shortTitle.length);
+  var hashTags = "";
+  for (var i = 0; i < article["hashTags"].length; ++i){
+    hashTags += (article["hashTags"][i] + " ");
+  }
+  Twitter.post("statuses/update", {status: `${shortTitle}, ${article["url"]}, ${hashTags}`}, function(err, res){
+    if (err) return console.log(err);
+    deferred.resolve(res);
+  });
+  return deferred.promise;
+}
 
 
 
@@ -210,8 +228,8 @@ function startChain(site){
     return generateTags(article);
   //console.log(article);
   })
-  .then(function(result){
-    console.log(result);
+  .then(function(article){
+    return sendTweet(article);
   })
   .catch(function(error){
     console.log(error);
@@ -230,6 +248,7 @@ setInterval(function(){
   // not being returned
   startChain(newsConfig[newsCounter]);
   // change time in MS to something more reasonable, perhaps every 30 mins. 1,800,000 ms
-},5000)
+},1800000);
 
- //startChain();
+ // Use below method for quicktesting
+ //startChain(newsConfig[0]);
