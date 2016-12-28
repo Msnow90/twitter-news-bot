@@ -5,6 +5,7 @@ var request = require("request");
 var Q = require("q");
 var parseString = require("xml2js").parseString;
 var newsConfig = require("./news-config");
+var userConfig = require("./user-config");
 
 
 var Twitter = new twit(config);
@@ -33,6 +34,8 @@ function getData (err, data, res){
   console.log(data);
 };
 
+
+//============= Twitter News Parser Section ==============//
 
 
 // shortenURL function used to call bit.ly's API
@@ -250,5 +253,52 @@ setInterval(function(){
   // change time in MS to something more reasonable, perhaps every 30 mins. 1,800,000 ms
 },1800000);
 
- // Use below method for quicktesting
- //startChain(newsConfig[0]);
+
+// ========= End Twitter News Parser Section =============//
+
+
+
+
+
+//=========== Twitter Follower Section ====================//
+
+
+
+// check tweets using the parameter provided: query, return the id of the user in first tweet
+function parseTweetForFollow(query){
+  var deferred = Q.defer();
+  Twitter.get("search/tweets", {q: query}, function(err, res){
+    if (err) deferred.reject(err);
+    else {
+      var userName = res["statuses"][0]["user"]["screen_name"];
+      deferred.resolve(userName);
+    }
+  });
+  return deferred.promise;
+}
+
+function followUser(userName){
+  var deferred = Q.defer();
+  Twitter.post("friendships/create", {screen_name: userName}, function(err, res){
+    if (err) deferred.reject(err);
+    else {
+      console.log(res);
+      deferred.resolve(res);
+    }
+  });
+  return deferred.promise;
+}
+
+// Interval loop to follow someone every 30 mins
+setInterval(function(){
+  parseTweetForFollow("#nodejs")
+  .then(function(id){
+    return followUser(id);
+  })
+  .catch(function(err){
+    console.log(err);
+  })
+}, 60000);
+
+
+//========== End Twitter Follower Section ===============//
